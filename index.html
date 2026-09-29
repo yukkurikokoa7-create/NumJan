@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>数字じゃんけん</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
+
+<!--
+  Firebase Realtime Database版
+  GitHub Pagesでも、ホストがPC/スマホのどちらでも同じ部屋を共有できます。
+  下の firebaseConfig は、Firebaseプロジェクト作成後に自分の値へ置き換えてください。
+-->
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+
+<style>
+:root{--desk:#25303f;--paper:#fbf8ef;--rule:#a9cbe8;--margin:#e48b8b;--pencil:#f0be25;--ink:#33322f;--ok:#2f7d5b}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--desk);color:var(--ink);font-family:"Zen Kaku Gothic New",sans-serif;display:flex;justify-content:center;padding:18px}
+.pad{width:100%;max-width:520px;background:var(--paper);border-radius:6px 6px 14px 14px;padding:26px 22px 26px 54px;position:relative;box-shadow:0 12px 30px #0006;background-image:linear-gradient(var(--rule) 1px,transparent 1px);background-size:100% 36px;background-position:0 30px;min-height:80vh}
+.pad::before{content:"";position:absolute;left:38px;top:0;bottom:0;width:2px;background:var(--margin)}
+h1{font-family:"Klee One",cursive;font-size:30px;margin:0 0 4px;line-height:36px}
+p.sub{margin:0 0 18px;line-height:36px;font-size:14px}
+label{display:block;font-size:13px;line-height:24px}
+input[type=text]{width:100%;font:600 20px "Klee One",cursive;padding:6px 10px;border:2px solid var(--ink);border-radius:4px;background:#fffdf6;margin-bottom:12px}
+button{font:700 16px "Zen Kaku Gothic New",sans-serif;padding:10px 18px;border:2px solid var(--ink);background:var(--pencil);color:var(--ink);border-radius:4px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);margin:4px 8px 4px 0}
+button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+button.ghost{background:#fffdf6}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:3px solid #2a6fdb;outline-offset:2px}
+.hide{display:none!important}
+.code{font:600 44px "Klee One",cursive;letter-spacing:.18em;line-height:54px}
+ul.names{list-style:none;padding:0;margin:8px 0}
+ul.names li{font:600 20px/36px "Klee One",cursive}
+.msg{color:#b3261e;min-height:24px;font-size:14px}
+.big{font:600 96px/1 "Klee One",cursive;text-align:center;margin:8px 0}
+.num-in{width:100%;font:600 56px "Klee One",cursive;text-align:center;padding:4px;border:2px solid var(--ink);border-radius:4px;background:#fffdf6}
+input[type=range]{width:100%;margin:12px 0}
+.bar{height:8px;background:#0001;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;width:100%;background:var(--margin);transform-origin:left}
+.row{display:flex;align-items:baseline;justify-content:space-between;line-height:36px;font:600 22px/36px "Klee One",cursive}
+.row .n{position:relative;display:inline-block;min-width:3.2ch;text-align:right;clip-path:inset(-10px 100% -10px 0)}
+.row .n.write{animation:write .9s steps(14,end) forwards}
+.row .n .pen{position:absolute;right:-6px;top:-4px;font-size:22px;opacity:0;transform-origin:bottom left;transform:rotate(-10deg)}
+.row .n.write .pen{animation:pen .9s linear forwards}
+@keyframes write{to{clip-path:inset(-10px -30px -10px 0)}}
+@keyframes pen{0%{opacity:1;right:100%}90%{opacity:1}100%{opacity:0;right:-6px}}
+.calc{font:600 26px/36px "Klee One",cursive;text-align:center;margin:14px 0;opacity:0;transform:scale(.8)}
+.calc.show{animation:pop .5s ease-out forwards}
+.calc small{display:block;font:500 14px "Zen Kaku Gothic New",sans-serif}
+@keyframes pop{to{opacity:1;transform:scale(1)}}
+.rank{display:flex;gap:10px;align-items:baseline;font:600 22px/36px "Klee One",cursive;opacity:0}
+.rank.show{animation:pop .4s ease-out forwards}
+.rank b{width:3.4em;color:var(--margin)}.rank.tie b::after{content:"(あいこ)";font-size:11px;color:var(--ink)}
+.rank.first b{color:var(--ok)}.rank.me{background:#f0be2544}
+#banner{position:fixed;top:0;left:0;right:0;z-index:10;background:var(--ink);color:var(--paper);padding:8px 12px;display:flex;gap:12px;align-items:center;justify-content:center;font-size:14px}
+#banner button{margin:0;padding:3px 10px;font-size:13px;box-shadow:none}
+#ov{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:20}
+.ring{width:240px;height:240px;border-radius:50%;background:var(--paper);display:flex;align-items:center;justify-content:center;position:relative}
+.ring svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:10;stroke-linecap:round}
+.ring .bg{stroke:#0002}.ring .fg{stroke:var(--margin);stroke-dasharray:691.2;stroke-dashoffset:691.2}
+.ring.go .fg{animation:ring 3s linear forwards}
+@keyframes ring{to{stroke-dashoffset:0}}
+.ring span{font:600 34px "Klee One",cursive}
+
+/* チャット */
+.chat{margin-top:18px;border:2px solid #0004;border-radius:8px;background:#fffdf6;overflow:hidden}
+.chat h2{font:600 20px "Klee One",cursive;margin:0;padding:8px 12px;border-bottom:1px dashed #0004}
+.chat-log{height:180px;overflow-y:auto;padding:8px 10px}
+.chat-empty{font-size:13px;opacity:.55;text-align:center;padding:30px 0}
+.chat-line{margin:5px 0;line-height:1.45;word-break:break-word}
+.chat-line .who{font-weight:700}
+.chat-line .time{font-size:11px;opacity:.5;margin-left:5px}
+.chat-form{display:flex;gap:6px;padding:8px;border-top:1px dashed #0004}
+.chat-form input{flex:1;min-width:0;font:16px "Zen Kaku Gothic New",sans-serif;padding:8px;border:2px solid #0006;border-radius:4px;background:#fff}
+.chat-form button{margin:0;padding:7px 12px;font-size:14px}
+.chat-note{font-size:11px;opacity:.55;padding:0 10px 8px}
+
+@media(max-width:560px){
+  body{padding:0}
+  .pad{min-height:100vh;border-radius:0;padding:22px 18px 28px 48px}
+  .pad::before{left:33px}
+  .big{font-size:82px}
+  .ring{width:220px;height:220px}.ring svg{width:220px;height:220px}
+}
+@media (prefers-reduced-motion:reduce){.row .n.write,.ring.go .fg{animation-duration:.01s}.row .n .pen{display:none}}
+</style>
+</head>
+<body>
+<main class="pad">
+
+<section id="s-home">
+  <h1>数字じゃんけん</h1>
+  <p class="sub">1〜100の数字で順位を決めよう。</p>
+  <label for="name">ニックネーム</label>
+  <input id="name" type="text" maxlength="10" placeholder="なまえ">
+  <button id="btn-create">部屋をつくる</button>
+  <hr style="border:0;border-top:1px dashed #0004;margin:14px 0">
+  <label for="code">部屋番号（英数字5桁）</label>
+  <input id="code" type="text" maxlength="5" placeholder="A1B2C" autocapitalize="characters" autocomplete="off">
+  <button id="btn-join" class="ghost">部屋に入る</button>
+  <div class="msg" id="msg-home" role="alert"></div>
+  <details style="font-size:13px;line-height:22px;margin-top:10px"><summary>ルール</summary>
+   全員が同時に1〜100の整数を出します。合計が「50×人数」以上なら小さい数字の順、未満なら大きい数字の順。同じ数字は同順位（あいこ）です。
+  </details>
+</section>
+
+<section id="s-lobby" class="hide">
+  <p class="sub" style="margin:0">部屋番号（友だちに伝えよう）</p>
+  <div class="code" id="room-code"></div>
+  <p class="sub" style="margin:0" id="count"></p>
+  <ul class="names" id="names"></ul>
+  <button id="btn-start" class="hide">ゲーム開始</button>
+  <p class="sub hide" id="wait-host">ホストの開始を待っています…</p>
+  <button id="btn-leave" class="ghost">退出</button>
+  <div id="chat-lobby"></div>
+</section>
+
+<section id="s-play" class="hide">
+  <p class="sub" style="margin:0">1〜100の数字を決めよう</p>
+  <div class="big" id="timer">10</div>
+  <div class="bar"><i id="bar"></i></div>
+  <input id="num" class="num-in" type="number" min="1" max="100" value="50" inputmode="numeric" aria-label="あなたの数字">
+  <input id="rng" type="range" min="1" max="100" value="50" aria-label="スライダー">
+  <button id="btn-lock">この数字で決定</button>
+  <p class="sub" id="locked"></p>
+  <div id="chat-play"></div>
+</section>
+
+<section id="s-result" class="hide">
+  <h1>開票</h1>
+  <div id="rows"></div>
+  <div class="calc" id="calc"></div>
+  <div id="ranks"></div>
+  <button id="btn-again" class="hide">もう一度あそぶ</button>
+  <p class="sub hide" id="wait-again">ホストが次を準備中…</p>
+  <button id="btn-out" class="ghost">退出</button>
+  <div id="chat-result"></div>
+</section>
+</main>
+
+<div id="banner" class="hide" role="status"><span id="banner-t"></span><button id="btn-cancel" class="ghost">退出</button></div>
+<div id="ov" class="hide"><div class="ring" id="ring">
+  <svg viewBox="0 0 240 240"><circle class="bg" cx="120" cy="120" r="110"/><circle class="fg" cx="120" cy="120" r="110"/></svg>
+  <span>集計完了</span>
+</div></div>
+
+<script>
+/* =========================================================
+   Firebase設定
+   Firebase Console → プロジェクトの設定 → マイアプリ
+   から取得した値をここへ入れてください。
+========================================================= */
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBeHNKc72PDKsj1A3IUp36LsOdKHyst3Uc",
+  authDomain: "numjan.firebaseapp.com",
+  projectId: "numjan",
+  storageBucket: "numjan.firebasestorage.app",
+  messagingSenderId: "835473531921",
+  appId: "1:835473531921:web:603826cf3121a7fccefdb0"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+
+const $=id=>document.getElementById(id);
+const CH="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const clamp=v=>Math.max(1,Math.min(100,Math.round(+v)||1));
+const rndCode=()=>Array.from({length:5},()=>CH[Math.random()*CH.length|0]).join("");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtTime=ts=>new Date(ts||Date.now()).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+
+let uid=null,myName="",room="",isHost=false,roomRef=null,roomValue=null;
+let players={},phase="home",curVal=50,locked=false,lastRound=0,roomListener=null;
+let timerInt=null,resultToken=0,chatListener=null,chatRef=null,chatReady=false;
+let wakeLock=null;
+
+/* ---------- Firebase認証 ---------- */
+auth.onAuthStateChanged(user=>{
+  if(user){uid=user.uid; checkSavedSession();}
+});
+auth.signInAnonymously().catch(e=>{
+  err("Firebaseへの接続に失敗しました。Firebase設定と「匿名ログイン」を確認してください。");
+  console.error(e);
+});
+
+/* ---------- 共通UI ---------- */
+function show(id){["home","lobby","play","result"].forEach(s=>$("s-"+s).classList.toggle("hide",s!==id))}
+const err=t=>$("msg-home").textContent=t||"";
+function getName(){
+  myName=$("name").value.trim().slice(0,10)||"ゲスト"+(Math.random()*90+10|0);
+  return myName;
+}
+function banner(t){
+  $("banner").classList.toggle("hide",!t);
+  $("banner-t").textContent=t||"";
+}
+async function wake(){
+  if(wakeLock||!navigator.wakeLock)return;
+  try{wakeLock=await navigator.wakeLock.request("screen");wakeLock.addEventListener("release",()=>wakeLock=null)}catch(e){}
+}
+function releaseWake(){try{wakeLock&&wakeLock.release()}catch(e){}wakeLock=null}
+function saveSession(){
+  try{localStorage.setItem("suujan-session",JSON.stringify({room,name:myName,ts:Date.now()}))}catch(e){}
+}
+function clearSession(){try{localStorage.removeItem("suujan-session")}catch(e){}}
+function loadSession(){
+  try{
+    const s=JSON.parse(localStorage.getItem("suujan-session"));
+    return s&&Date.now()-s.ts<10*60*1000?s:null;
+  }catch(e){return null}
+}
+
+/* ---------- Firebaseルーム ---------- */
+function roomPath(code){return db.ref("rooms/"+code)}
+function playerPath(code,id){return db.ref("rooms/"+code+"/players/"+id)}
+
+async function createRoom(){
+  if(!uid){err("接続準備中です。少し待ってください。");return}
+  getName();err(""); banner("部屋を作成中…");
+  let code="",ref=null;
+  for(let i=0;i<10;i++){
+    const c=rndCode(),r=roomPath(c),snap=await r.once("value");
+    if(!snap.exists()){code=c;ref=r;break}
+  }
+  if(!code){banner("");err("部屋を作れませんでした。もう一度お試しください。");return}
+  room=code;roomRef=ref;isHost=true;phase="lobby";
+  const initial={
+    hostId:uid,
+    createdAt:firebase.database.ServerValue.TIMESTAMP,
+    phase:"lobby",
+    round:0,
+    players:{[uid]:{name:myName,online:true,joinedAt:firebase.database.ServerValue.TIMESTAMP}}
+  };
+  try{
+    await ref.set(initial);
+    await setupPresence();
+    listenRoom();
+    startChatListener();
+    saveSession();
+    banner("");
+    renderLobby();
+    renderChatForCurrentScreen();
+  }catch(e){
+    console.error(e);banner("");err("部屋の作成に失敗しました。");room="";roomRef=null;isHost=false;
+  }
+}
+
+async function joinRoom(){
+  if(!uid){err("接続準備中です。少し待ってください。");return}
+  getName();err("");
+  const code=$("code").value.trim().toUpperCase();
+  if(!/^[A-Z0-9]{5}$/.test(code)){err("部屋番号は英数字5桁で入力してください。");return}
+  const ref=roomPath(code),snap=await ref.once("value");
+  if(!snap.exists()){err("その部屋は見つかりません。");return}
+  const data=snap.val();
+  if(data.phase!=="lobby"&&data.phase!=="play"&&data.phase!=="result"){err("この部屋には参加できません。");return}
+  if(!data.players||(!data.players[uid]&&Object.keys(data.players).length>=30)){err("満員です。");return}
+  room=code;roomRef=ref;isHost=data.hostId===uid;phase=data.phase;
+  try{
+    await playerPath(room,uid).update({name:myName,online:true,joinedAt:firebase.database.ServerValue.TIMESTAMP});
+    await setupPresence();
+    listenRoom();
+    startChatListener();
+    saveSession();banner("");
+    show(phase==="lobby"?"lobby":phase==="play"?"play":"result");
+    wake();
+  }catch(e){console.error(e);err("部屋への参加に失敗しました。")}
+}
+
+async function setupPresence(){
+  if(!roomRef||!uid)return;
+  const connected=db.ref(".info/connected");
+  connected.on("value",snap=>{
+    if(snap.val()!==true||!roomRef)return;
+    const p=playerPath(room,uid);
+    p.onDisconnect().update({online:false});
+    p.update({online:true});
+  });
+}
+
+function listenRoom(){
+  if(roomListener&&roomRef)roomRef.off("value",roomListener);
+  roomListener=snap=>{
+    if(!snap.exists()){leave("部屋が終了しました。");return}
+    roomValue=snap.val()||{};
+    players=roomValue.players||{};
+    const newHost=roomValue.hostId===uid;
+    if(newHost!==isHost){isHost=newHost;updateHostUI()}
+    handleRoomState();
+  };
+  roomRef.on("value",roomListener);
+}
+
+function updateHostUI(){
+  $("btn-start").classList.toggle("hide",!isHost);
+  $("wait-host").classList.toggle("hide",isHost);
+  $("btn-again").classList.toggle("hide",!isHost);
+  if(isHost) $("wait-again").classList.add("hide");
+}
+
+function handleRoomState(){
+  if(!roomValue)return;
+
+  // ホストがスマホのスリープ等で切断された場合、残っている参加者から
+  // 1人がホストを引き継げるようにする。
+  const host=roomValue.hostId;
+  const hostOnline=host && roomValue.players && roomValue.players[host] &&
+    roomValue.players[host].online!==false;
+  if(!hostOnline && uid && roomValue.players && roomValue.players[uid] &&
+     roomValue.players[uid].online!==false){
+    const candidates=Object.entries(roomValue.players)
+      .filter(([,p])=>p.online!==false)
+      .map(([id])=>id)
+      .sort();
+    if(candidates[0]===uid && roomRef){
+      roomRef.child("hostId").transaction(current=>{
+        if(current===host)return uid;
+        return;
+      });
+    }
+  }
+
+  phase=roomValue.phase||"lobby";
+  updateHostUI();
+  if(phase==="lobby"){
+    renderLobby();
+    renderChatForCurrentScreen();
+  }else if(phase==="play"){
+    renderPlayState();
+    renderChatForCurrentScreen();
+  }else if(phase==="result"&&roomValue.result){
+    if(lastRound!==roomValue.round){lastRound=roomValue.round; reveal(roomValue.result)}
+    renderChatForCurrentScreen();
+  }
+}
+
+function renderLobby(){
+  $("room-code").textContent=room;
+  const list=Object.entries(players);
+  $("count").textContent="参加者 "+list.length+"人";
+  $("names").innerHTML=list.map(([id,p])=>"<li>✎ "+esc(p.name||"ゲスト")+(p.online===false?"（再接続待ち）":"")+(id===roomValue.hostId?" ★":"")+"</li>").join("");
+  $("btn-start").disabled=list.length<2;
+  show("lobby");
+  wake();
+}
+
+async function startGame(){
+  if(!isHost||!roomRef)return;
+  const list=Object.entries(players).filter(([,p])=>p.online!==false);
+  if(list.length<2)return;
+  const next=(roomValue.round||0)+1;
+  const endsAt=Date.now()+10000;
+  await roomRef.update({
+    phase:"play",round:next,
+    roundData:{endsAt,submissions:{}},
+    result:null
+  });
+  lastRound=next;
+  setTimeout(()=>hostCheckFinish(next),10200);
+}
+
+async function hostCheckFinish(round){
+  if(!isHost||!roomRef||!roomValue||roomValue.round!==round||roomValue.phase!=="play")return;
+  const snap=await roomRef.once("value"),data=snap.val();
+  if(!data||data.phase!=="play"||data.round!==round)return;
+  const active=Object.entries(data.players||{}).filter(([,p])=>p.online!==false);
+  const subs=(data.roundData&&data.roundData.submissions)||{};
+  const all=active.every(([id])=>Object.prototype.hasOwnProperty.call(subs,id));
+  const ended=Date.now()>=(data.roundData?.endsAt||0);
+  if(all||ended)finishRound(data,active,subs);
+  else setTimeout(()=>hostCheckFinish(round),250);
+}
+
+async function finishRound(data,active,subs){
+  if(!isHost||!roomRef||data.phase!=="play")return;
+  const entries=active.map(([id,p])=>({
+    id,name:String(p.name||"ゲスト").slice(0,10),
+    n:clamp(subs[id])
+  }));
+  const sum=entries.reduce((a,b)=>a+b.n,0);
+  const thr=50*entries.length;
+  const asc=sum>=thr;
+  const result={entries,sum,thr,asc,finishedAt:firebase.database.ServerValue.TIMESTAMP};
+  await roomRef.update({phase:"result",result});
+}
+
+async function again(){
+  if(!isHost||!roomRef)return;
+  const updates={phase:"lobby",result:null,roundData:null};
+  await roomRef.update(updates);
+  renderLobby();
+}
+
+/* ---------- ゲーム画面 ---------- */
+function renderPlayState(){
+  const end=roomValue.roundData?.endsAt||Date.now();
+  const sub=roomValue.roundData?.submissions||{};
+  locked=Object.prototype.hasOwnProperty.call(sub,uid);
+  $("btn-lock").disabled=locked;
+  $("locked").textContent=locked?"決定："+clamp(sub[uid])+"　他の人を待っています…":"";
+  show("play");wake();
+  const remain=Math.max(0,end-Date.now());
+  const sec=Math.max(1,Math.ceil(remain/1000));
+  const bar=$("bar");bar.style.transition="none";bar.style.transform="scaleX(1)";
+  requestAnimationFrame(()=>{
+    bar.style.transition="transform "+(remain/1000)+"s linear";
+    bar.style.transform="scaleX(0)";
+  });
+  clearInterval(timerInt);
+  const tick=()=>{
+    const left=Math.max(0,Math.ceil((end-Date.now())/1000));
+    $("timer").textContent=left;
+    if(left<=0){
+      clearInterval(timerInt);
+      if(!locked)submit();
+    }
+  };
+  tick();timerInt=setInterval(tick,200);
+  if(isHost) setTimeout(()=>hostCheckFinish(roomValue.round),Math.max(0,remain+50));
+}
+
+async function submit(){
+  if(locked||!roomRef||!uid)return;
+  locked=true;
+  const n=clamp(curVal);
+  $("locked").textContent="決定："+n+"　他の人を待っています…";
+  $("btn-lock").disabled=true;
+  await roomRef.child("roundData/submissions/"+uid).set(n);
+  if(isHost)hostCheckFinish(roomValue.round);
+}
+
+/* ---------- 開票演出 ---------- */
+async function reveal(m){
+  const token=++resultToken;
+  clearInterval(timerInt);
+  const ring=$("ring");
+  ring.classList.remove("go");$("ov").classList.remove("hide");void ring.offsetWidth;ring.classList.add("go");
+  await sleep(3200);
+  if(token!==resultToken)return;
+  $("ov").classList.add("hide");
+  show("result");
+  const rows=$("rows"),calc=$("calc"),ranks=$("ranks");
+  rows.innerHTML="";ranks.innerHTML="";calc.className="calc";
+  m.entries.forEach(e=>{
+    const d=document.createElement("div");d.className="row";
+    d.innerHTML="<span>"+esc(e.name)+"</span><span class='n'>"+e.n+"<span class='pen'>✏️</span></span>";
+    rows.appendChild(d);
+  });
+  await sleep(500);
+  for(const d of rows.children){d.querySelector(".n").classList.add("write");await sleep(1000)}
+  const sym=m.sum>m.thr?"＞":m.sum<m.thr?"＜":"＝";
+  calc.innerHTML=m.sum+" "+sym+" "+m.thr+"<small>合計 "+sym+" 50×"+m.entries.length+"人　→　"+(m.asc?"小さい数字が上位":"大きい数字が上位")+"</small>";
+  calc.classList.add("show");await sleep(1800);
+  const sorted=[...m.entries].sort((a,b)=>m.asc?a.n-b.n:b.n-a.n);
+  sorted.forEach(e=>{e.rank=1+sorted.filter(o=>m.asc?o.n<e.n:o.n>e.n).length});
+  sorted.forEach(e=>{
+    const tie=sorted.filter(o=>o.rank===e.rank).length>1;
+    const d=document.createElement("div");
+    d.className="rank"+(tie?" tie":"")+(e.rank===1?" first":"")+(e.id===uid?" me":"");
+    d.innerHTML="<b>"+e.rank+"位</b><span>"+esc(e.name)+"　"+e.n+"</span>";
+    ranks.appendChild(d);
+  });
+  for(const d of ranks.children){d.classList.add("show");await sleep(450)}
+  $("btn-again").classList.toggle("hide",!isHost);
+  $("wait-again").classList.toggle("hide",isHost);
+  wake();
+}
+
+/* ---------- チャット ---------- */
+let chatItems=[];
+
+function buildChat(targetId){
+  const target=$(targetId);
+  if(!target||target.dataset.ready==="1")return;
+  target.dataset.ready="1";
+  target.innerHTML=`
+    <div class="chat">
+      <h2>💬 ひとことチャット</h2>
+      <div class="chat-log"><div class="chat-empty">まだメッセージはありません。</div></div>
+      <form class="chat-form">
+        <input type="text" maxlength="120" placeholder="メッセージを書く…" autocomplete="off">
+        <button type="submit">送信</button>
+      </form>
+      <div class="chat-note">この部屋の参加者だけが見られます。</div>
+    </div>`;
+  const form=target.querySelector(".chat-form"),input=target.querySelector("input");
+  form.onsubmit=async e=>{
+    e.preventDefault();
+    const text=input.value.trim();
+    if(!text||!roomRef||!uid)return;
+    input.value="";
+    try{
+      await roomRef.child("chat").push({
+        uid,name:myName,text:text.slice(0,120),ts:firebase.database.ServerValue.TIMESTAMP
+      });
+    }catch(err){console.error(err)}
+  };
+}
+
+function renderChatLogs(){
+  const html=chatItems.length
+    ?chatItems.slice(-100).map(v=>
+      '<div class="chat-line"><span class="who">'+esc(v.name||"ゲスト")+'</span>'+
+      '<span class="time">'+fmtTime(v.ts)+'</span><br>'+esc(v.text)+'</div>'
+    ).join("")
+    :'<div class="chat-empty">まだメッセージはありません。</div>';
+
+  ["chat-lobby","chat-play","chat-result"].forEach(id=>{
+    const log=$(id)?.querySelector(".chat-log");
+    if(log){
+      log.innerHTML=html;
+      log.scrollTop=log.scrollHeight;
+    }
+  });
+}
+
+function startChatListener(){
+  if(!roomRef||!uid)return;
+  buildChat("chat-lobby");
+  buildChat("chat-play");
+  buildChat("chat-result");
+
+  if(chatListener&&chatRef)chatRef.off("value",chatListener);
+  chatItems=[];
+  chatRef=roomRef.child("chat");
+  chatListener=snap=>{
+    chatItems=[];
+    snap.forEach(c=>{const v=c.val();if(v&&v.text)chatItems.push(v)});
+    chatItems.sort((a,b)=>(a.ts||0)-(b.ts||0));
+    renderChatLogs();
+  };
+  chatRef.on("value",chatListener);
+}
+
+function renderChatForCurrentScreen(){
+  if(!roomRef||!uid)return;
+  if(!chatListener)startChatListener();
+  renderChatLogs();
+}
+
+/* ---------- 部屋退出 ---------- */
+async function leave(msg){
+  const oldRoom=room,oldUid=uid;
+  clearInterval(timerInt);resultToken++;
+  if(roomListener&&roomRef)roomRef.off("value",roomListener);
+  if(chatListener&&chatRef)chatRef.off("value",chatListener);
+  try{if(oldRoom&&oldUid)await playerPath(oldRoom,oldUid).update({online:false})}catch(e){}
+  room="";roomRef=null;roomValue=null;players={};isHost=false;phase="home";lastRound=0;chatListener=null;chatRef=null;chatItems=[];
+  clearSession();releaseWake();banner("");$("ov").classList.add("hide");
+  show("home");err(typeof msg==="string"?msg:"");
+}
+
+async function tryResume(){
+  const s=loadSession();
+  if(!s||!uid)return;
+  $("name").value=s.name||"";
+  const snap=await roomPath(s.room).once("value");
+  if(!snap.exists()){clearSession();return}
+  const data=snap.val();
+  if(!data.players)return;
+  room=s.room;myName=s.name||"ゲスト";roomRef=roomPath(room);isHost=data.hostId===uid;phase=data.phase||"lobby";
+  try{
+    await playerPath(room,uid).update({name:myName,online:true});
+    await setupPresence();listenRoom();startChatListener();show(phase==="lobby"?"lobby":phase==="play"?"play":"result");wake();
+  }catch(e){clearSession()}
+}
+
+/* ---------- イベント ---------- */
+$("btn-create").onclick=createRoom;
+$("btn-join").onclick=joinRoom;
+$("code").addEventListener("input",e=>e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""));
+$("btn-start").onclick=startGame;
+$("btn-again").onclick=again;
+$("btn-leave").onclick=$("btn-out").onclick=$("btn-cancel").onclick=()=>leave();
+$("btn-lock").onclick=submit;
+$("num").oninput=e=>{curVal=e.target.value;if(curVal!=="")$("rng").value=clamp(curVal)};
+$("num").onblur=e=>{curVal=clamp(e.target.value);e.target.value=curVal};
+$("rng").oninput=e=>{curVal=e.target.value;$("num").value=curVal};
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden&&room)wake();
+});
+setInterval(()=>{
+  if(roomValue&&isHost&&roomValue.phase==="play")hostCheckFinish(roomValue.round);
+},1000);
+
+/* 画面が切り替わった後もチャットを表示 */
+const oldHandleRoomState=handleRoomState;
+handleRoomState=function(){
+  oldHandleRoomState();
+  renderChatForCurrentScreen();
+};
+
+/* Firebaseの準備後に前回セッションを復帰 */
+let resumed=false;
+function checkSavedSession(){
+  if(resumed)return;resumed=true;
+  setTimeout(tryResume,200);
+}
+</script>
+</body>
+</html>
