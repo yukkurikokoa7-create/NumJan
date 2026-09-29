@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数字じゃんけん</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{--desk:#25303f;--paper:#fbf8ef;--rule:#a9cbe8;--margin:#e48b8b;--pencil:#f0be25;--ink:#33322f;--ok:#2f7d5b}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--desk);color:var(--ink);font-family:"Zen Kaku Gothic New",sans-serif;display:flex;justify-content:center;padding:18px}
+.pad{width:100%;max-width:520px;background:var(--paper);border-radius:6px 6px 14px 14px;padding:26px 22px 26px 54px;position:relative;box-shadow:0 12px 30px #0006;
+ background-image:linear-gradient(var(--rule) 1px,transparent 1px);background-size:100% 36px;background-position:0 30px;min-height:80vh}
+.pad::before{content:"";position:absolute;left:38px;top:0;bottom:0;width:2px;background:var(--margin)}
+h1{font-family:"Klee One",cursive;font-size:30px;margin:0 0 4px;line-height:36px}
+p.sub{margin:0 0 18px;line-height:36px;font-size:14px}
+label{display:block;font-size:13px;line-height:24px}
+input[type=text]{width:100%;font:600 20px "Klee One",cursive;padding:6px 10px;border:2px solid var(--ink);border-radius:4px;background:#fffdf6;margin-bottom:12px}
+button{font:700 16px "Zen Kaku Gothic New",sans-serif;padding:10px 18px;border:2px solid var(--ink);background:var(--pencil);color:var(--ink);border-radius:4px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);margin:4px 8px 4px 0}
+button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+button.ghost{background:#fffdf6}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:3px solid #2a6fdb;outline-offset:2px}
+.hide{display:none!important}
+.code{font:600 44px "Klee One",cursive;letter-spacing:.18em;line-height:54px}
+ul.names{list-style:none;padding:0;margin:8px 0}
+ul.names li{font:600 20px/36px "Klee One",cursive}
+.msg{color:#b3261e;min-height:24px;font-size:14px}
+.big{font:600 96px/1 "Klee One",cursive;text-align:center;margin:8px 0}
+.num-in{width:100%;font:600 56px "Klee One",cursive;text-align:center;padding:4px;border:2px solid var(--ink);border-radius:4px;background:#fffdf6}
+input[type=range]{width:100%;margin:12px 0}
+.bar{height:8px;background:#0001;border-radius:4px;overflow:hidden}.bar i{display:block;height:100%;width:100%;background:var(--margin);transform-origin:left}
+/* notepad rows */
+.row{display:flex;align-items:baseline;justify-content:space-between;line-height:36px;font:600 22px/36px "Klee One",cursive}
+.row .n{position:relative;display:inline-block;min-width:3.2ch;text-align:right;clip-path:inset(-10px 100% -10px 0)}
+.row .n.write{animation:write .9s steps(14,end) forwards}
+.row .n .pen{position:absolute;right:-6px;top:-4px;font-size:22px;opacity:0;transform-origin:bottom left;transform:rotate(-10deg)}
+.row .n.write .pen{animation:pen .9s linear forwards}
+@keyframes write{to{clip-path:inset(-10px -30px -10px 0)}}
+@keyframes pen{0%{opacity:1;right:100%}90%{opacity:1}100%{opacity:0;right:-6px}}
+.calc{font:600 26px/36px "Klee One",cursive;text-align:center;margin:14px 0;opacity:0;transform:scale(.8)}
+.calc.show{animation:pop .5s ease-out forwards}
+.calc small{display:block;font:500 14px "Zen Kaku Gothic New",sans-serif}
+@keyframes pop{to{opacity:1;transform:scale(1)}}
+.rank{display:flex;gap:10px;align-items:baseline;font:600 22px/36px "Klee One",cursive;opacity:0}
+.rank.show{animation:pop .4s ease-out forwards}
+.rank b{width:3.4em;color:var(--margin)}.rank.tie b::after{content:"(あいこ)";font-size:11px;color:var(--ink)}
+.rank.first b{color:var(--ok)}.rank.me{background:#f0be2544}
+/* overlay */
+#ov{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:9}
+.ring{width:240px;height:240px;border-radius:50%;background:var(--paper);display:flex;align-items:center;justify-content:center;position:relative}
+.ring svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:10;stroke-linecap:round}
+.ring .bg{stroke:#0002}.ring .fg{stroke:var(--margin);stroke-dasharray:691.2;stroke-dashoffset:691.2}
+.ring.go .fg{animation:ring 3s linear forwards}
+@keyframes ring{to{stroke-dashoffset:0}}
+.ring span{font:600 34px "Klee One",cursive}
+@media (prefers-reduced-motion:reduce){.row .n.write,.ring.go .fg{animation-duration:.01s}.row .n .pen{display:none}}
+</style>
+</head>
+<body>
+<main class="pad">
+
+<section id="s-home">
+  <h1>数字じゃんけん</h1>
+  <p class="sub">1〜100の数字で順位を決めよう。</p>
+  <label for="name">ニックネーム</label>
+  <input id="name" type="text" maxlength="10" placeholder="なまえ">
+  <button id="btn-create">部屋をつくる</button>
+  <hr style="border:0;border-top:1px dashed #0004;margin:14px 0">
+  <label for="code">部屋番号（英数字5桁）</label>
+  <input id="code" type="text" maxlength="5" placeholder="A1B2C" autocapitalize="characters" autocomplete="off">
+  <button id="btn-join" class="ghost">部屋に入る</button>
+  <div class="msg" id="msg-home" role="alert"></div>
+  <details style="font-size:13px;line-height:22px;margin-top:10px"><summary>ルール</summary>
+   全員が同時に1〜100の整数を出します。合計が「50×人数」以上なら小さい数字の順、未満なら大きい数字の順で1位から順位がつきます。同じ数字は同順位（あいこ）です。</details>
+</section>
+
+<section id="s-lobby" class="hide">
+  <p class="sub" style="margin:0">部屋番号（友だちに伝えよう）</p>
+  <div class="code" id="room-code"></div>
+  <p class="sub" style="margin:0" id="count"></p>
+  <ul class="names" id="names"></ul>
+  <button id="btn-start" class="hide">ゲーム開始</button>
+  <p class="sub hide" id="wait-host">ホストの開始を待っています…</p>
+  <button id="btn-leave" class="ghost">退出</button>
+</section>
+
+<section id="s-play" class="hide">
+  <p class="sub" style="margin:0">1〜100の数字を決めよう</p>
+  <div class="big" id="timer">10</div>
+  <div class="bar"><i id="bar"></i></div>
+  <input id="num" class="num-in" type="number" min="1" max="100" value="50" inputmode="numeric" aria-label="あなたの数字">
+  <input id="rng" type="range" min="1" max="100" value="50" aria-label="スライダー">
+  <button id="btn-lock">この数字で決定</button>
+  <p class="sub" id="locked"></p>
+</section>
+
+<section id="s-result" class="hide">
+  <h1>開票</h1>
+  <div id="rows"></div>
+  <div class="calc" id="calc"></div>
+  <div id="ranks"></div>
+  <button id="btn-again" class="hide">もう一度あそぶ</button>
+  <p class="sub hide" id="wait-again">ホストが次を準備中…</p>
+  <button id="btn-out" class="ghost">退出</button>
+</section>
+</main>
+
+<div id="ov" class="hide"><div class="ring" id="ring">
+  <svg viewBox="0 0 240 240"><circle class="bg" cx="120" cy="120" r="110"/><circle class="fg" cx="120" cy="120" r="110"/></svg>
+  <span>集計完了</span></div></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const PFX="suujan-v1-", CH="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let peer=null,isHost=false,myName="",room="",hostConn=null,conns=[],players={},phase="lobby",subs={},finTimer=null,timerInt=null,curVal=50,locked=false;
+
+function show(id){["home","lobby","play","result"].forEach(s=>$("s-"+s).classList.toggle("hide",s!==id))}
+const err=t=>$("msg-home").textContent=t;
+const clamp=v=>Math.max(1,Math.min(100,Math.round(+v)||1));
+const rndCode=()=>Array.from({length:5},()=>CH[Math.random()*CH.length|0]).join("");
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function getName(){myName=$("name").value.trim()||"ゲスト"+(Math.random()*90+10|0);return myName}
+
+/* ---------- Host ---------- */
+function createRoom(tries=0){
+  getName(); err("");
+  room=rndCode();
+  peer=new Peer(PFX+room);
+  peer.on("open",()=>{isHost=true;players={host:myName};phase="lobby";enterLobby()});
+  peer.on("error",e=>{
+    if(e.type==="unavailable-id"&&tries<8){peer.destroy();createRoom(tries+1)}
+    else err("接続に失敗しました。時間をおいて再度お試しください。("+e.type+")");
+  });
+  peer.on("connection",c=>{
+    c.on("data",m=>hostRecv(c,m));
+    c.on("close",()=>{conns=conns.filter(x=>x!==c);delete players[c.peer];if(phase==="lobby")sendLobby()});
+  });
+}
+function bc(m){conns.forEach(c=>c.open&&c.send(m))}
+function sendLobby(){const m={t:"lobby",names:Object.values(players)};bc(m);onMsg(m)}
+function hostRecv(c,m){
+  if(m.t==="join"){
+    if(phase!=="lobby"){c.send({t:"err",msg:"ゲーム中です。次のラウンドまでお待ちください。"});setTimeout(()=>c.close(),300);return}
+    if(conns.length>=29){c.send({t:"err",msg:"満員です。"});return}
+    conns.push(c);players[c.peer]=String(m.name).slice(0,10);c.send({t:"joined"});sendLobby();
+  }else if(m.t==="sub"&&phase==="play"&&players[c.peer]){subs[c.peer]=clamp(m.n);checkDone()}
+}
+function startGame(){
+  if(Object.keys(players).length<2)return;
+  phase="play";subs={};
+  const m={t:"start",sec:10};bc(m);onMsg(m);
+  clearTimeout(finTimer);finTimer=setTimeout(finish,12500);
+}
+function checkDone(){if(Object.keys(subs).length>=Object.keys(players).length&&Object.keys(players).every(k=>k in subs)){clearTimeout(finTimer);setTimeout(finish,200)}}
+function finish(){
+  if(phase!=="play")return;phase="result";clearTimeout(finTimer);
+  const ids=Object.keys(players);
+  const entries=ids.map(id=>({name:players[id],n:id in subs?subs[id]:(Math.random()*100|0)+1}));
+  const sum=entries.reduce((a,b)=>a+b.n,0),thr=50*entries.length,asc=sum>=thr;
+  const m={t:"result",entries,sum,thr,asc};bc(m);onMsg(m);
+}
+function again(){phase="lobby";sendLobby()}
+
+/* ---------- Guest ---------- */
+function joinRoom(){
+  getName();err("");
+  room=$("code").value.trim().toUpperCase();
+  if(!/^[A-Z0-9]{5}$/.test(room)){err("部屋番号は英数字5桁で入力してください。");return}
+  peer=new Peer();
+  const fail=t=>{err(t);try{peer.destroy()}catch(e){}};
+  peer.on("error",e=>fail(e.type==="peer-unavailable"?"その部屋は見つかりません。":"接続に失敗しました。("+e.type+")"));
+  peer.on("open",()=>{
+    hostConn=peer.connect(PFX+room,{reliable:true});
+    const to=setTimeout(()=>fail("接続がタイムアウトしました。"),9000);
+    hostConn.on("open",()=>{clearTimeout(to);hostConn.send({t:"join",name:myName})});
+    hostConn.on("data",m=>{if(m.t==="err"){fail(m.msg);show("home")}else if(m.t==="joined"){isHost=false;enterLobby()}else onMsg(m)});
+    hostConn.on("close",()=>{if(!isHost&&peer){leave(true)}});
+  });
+}
+
+/* ---------- Common ---------- */
+function enterLobby(){
+  $("room-code").textContent=room;
+  $("btn-start").classList.toggle("hide",!isHost);
+  $("wait-host").classList.toggle("hide",isHost);
+  if(isHost)sendLobby();
+  show("lobby");
+}
+function leave(byHost){
+  if(byHost)err("ホストとの接続が切れました。");
+  clearInterval(timerInt);clearTimeout(finTimer);
+  try{peer&&peer.destroy()}catch(e){}
+  peer=null;hostConn=null;conns=[];players={};isHost=false;$("ov").classList.add("hide");show("home");
+}
+function submit(){
+  if(locked)return;locked=true;
+  const n=clamp(curVal);
+  if(isHost){subs.host=n;checkDone()}else hostConn&&hostConn.send({t:"sub",n});
+  $("locked").textContent="決定："+n+"　他の人を待っています…";$("btn-lock").disabled=true;
+}
+function onMsg(m){
+  if(m.t==="lobby"){
+    $("names").innerHTML=m.names.map(n=>"<li>✎ "+esc(n)+"</li>").join("");
+    $("count").textContent="参加者 "+m.names.length+"人";
+    $("btn-start").disabled=m.names.length<2;
+    show("lobby");
+    $("ov").classList.add("hide");
+  }else if(m.t==="start"){
+    locked=false;curVal=50;$("num").value=50;$("rng").value=50;$("btn-lock").disabled=false;$("locked").textContent="";
+    show("play");const end=Date.now()+m.sec*1000;
+    const bar=$("bar");bar.style.transition="none";bar.style.transform="scaleX(1)";
+    requestAnimationFrame(()=>{bar.style.transition="transform "+m.sec+"s linear";bar.style.transform="scaleX(0)"});
+    clearInterval(timerInt);
+    const tick=()=>{const left=Math.max(0,Math.ceil((end-Date.now())/1000));$("timer").textContent=left;if(left<=0){clearInterval(timerInt);submit()}};
+    tick();timerInt=setInterval(tick,200);
+  }else if(m.t==="result")reveal(m);
+}
+async function reveal(m){
+  clearInterval(timerInt);
+  // 1) 集計完了
+  const ring=$("ring");ring.classList.remove("go");$("ov").classList.remove("hide");void ring.offsetWidth;ring.classList.add("go");
+  await sleep(3200);$("ov").classList.add("hide");
+  // 2) 鉛筆で書き込み
+  show("result");
+  const rows=$("rows"),calc=$("calc"),ranks=$("ranks");
+  rows.innerHTML="";ranks.innerHTML="";calc.className="calc";
+  $("btn-again").classList.add("hide");$("wait-again").classList.add("hide");
+  m.entries.forEach(e=>{const d=document.createElement("div");d.className="row";d.innerHTML="<span>"+esc(e.name)+"</span><span class='n'>"+e.n+"<span class='pen'>✏️</span></span>";rows.appendChild(d)});
+  await sleep(500);
+  for(const d of rows.children){d.querySelector(".n").classList.add("write");await sleep(1000)}
+  // 3) 合計 vs 50n
+  const sym=m.sum>m.thr?"＞":m.sum<m.thr?"＜":"＝";
+  calc.innerHTML=m.sum+" "+sym+" "+m.thr+"<small>合計 "+sym+" 50×"+m.entries.length+"人　→　"+(m.asc?"小さい数字が上位":"大きい数字が上位")+"</small>";
+  calc.classList.add("show");await sleep(1800);
+  // 4) 順位
+  const sorted=[...m.entries].sort((a,b)=>m.asc?a.n-b.n:b.n-a.n);
+  sorted.forEach(e=>{e.rank=1+sorted.filter(o=>m.asc?o.n<e.n:o.n>e.n).length});
+  sorted.forEach(e=>{
+    const tie=sorted.filter(o=>o.rank===e.rank).length>1;
+    const d=document.createElement("div");d.className="rank"+(tie?" tie":"")+(e.rank===1?" first":"")+(e.name===myName?" me":"");
+    d.innerHTML="<b>"+e.rank+"位</b><span>"+esc(e.name)+"　"+e.n+"</span>";ranks.appendChild(d);
+  });
+  for(const d of ranks.children){d.classList.add("show");await sleep(450)}
+  $("btn-again").classList.toggle("hide",!isHost);$("wait-again").classList.toggle("hide",isHost);
+}
+
+/* ---------- Events ---------- */
+$("btn-create").onclick=()=>createRoom();
+$("btn-join").onclick=joinRoom;
+$("code").addEventListener("input",e=>e.target.value=e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,""));
+$("btn-start").onclick=startGame;
+$("btn-again").onclick=again;
+$("btn-leave").onclick=$("btn-out").onclick=()=>leave(false);
+$("btn-lock").onclick=submit;
+$("num").oninput=e=>{curVal=e.target.value;if(curVal!=="")$("rng").value=clamp(curVal)};
+$("num").onblur=e=>{curVal=clamp(e.target.value);e.target.value=curVal};
+$("rng").oninput=e=>{curVal=e.target.value;$("num").value=curVal};
+</script>
+</body>
+</html>
