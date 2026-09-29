@@ -200,6 +200,21 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+const firebaseConfigIsPlaceholder =
+  firebaseConfig.apiKey === "YOUR_API_KEY" ||
+  firebaseConfig.projectId === "YOUR_PROJECT_ID" ||
+  firebaseConfig.appId === "YOUR_APP_ID";
+
+if(firebaseConfigIsPlaceholder){
+  document.addEventListener("DOMContentLoaded",()=>{
+    const m=document.getElementById("msg-home");
+    if(m){
+      m.textContent="Firebase設定が未入力です。現在動いているindex.htmlのfirebaseConfigをこのファイルへコピーしてください。";
+    }
+  });
+  console.warn("Firebase config is still placeholder.");
+}
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
