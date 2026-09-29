@@ -4,11 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>数字じゃんけん</title>
-
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
@@ -175,7 +170,7 @@ const show=id=>["home","lobby","play","result"].forEach(s=>$("s-"+s).classList.t
 let uid=null,myName="",room="",isHost=false,roomRef=null;
 let roomData=null,players={},phase="home",round=0;
 let curVal=50,locked=false,timerInt=null,lastShownRound=0;
-let chatRef=null,chatListener=null,wakeLock=null;
+let chatRef=null,chatListener=null,chatItems=[],wakeLock=null;
 
 function getName(){
   myName=$("name").value.trim().slice(0,10)||"ゲスト"+(Math.random()*90+10|0);
@@ -453,7 +448,8 @@ function chatHTML(){
 }
 function buildChat(id){
   const el=$(id);if(!el)return;
-  el.innerHTML=chatHTML();
+  // すでにチャット欄がある場合は作り直さない（受信済みメッセージを消さない）
+  if(!el.querySelector(".chat")) el.innerHTML=chatHTML();
   const form=el.querySelector(".chat-form"),input=el.querySelector("input");
   form.onsubmit=async e=>{
     e.preventDefault();
@@ -467,34 +463,27 @@ function buildChat(id){
     }catch(err2){console.error(err2);input.value=text}
   };
 }
-let chatItems = [];
-
 function startChatListener(){
   if(!roomRef)return;
+  if(chatListener&&chatRef)chatRef.off("value",chatListener);
 
-  if(chatListener && chatRef){
-    chatRef.off("value", chatListener);
-  }
-
-  // 先に画面を作る
+  // 先にチャットUIを1回だけ作る
   buildChat("chat-lobby");
   buildChat("chat-play");
   buildChat("chat-result");
 
-  chatRef = roomRef.child("chat").limitToLast(80);
-
-  chatListener = snap => {
-    chatItems = [];
-
-    snap.forEach(c => {
-      const v = c.val();
-      if(v) chatItems.push(v);
+  chatRef=roomRef.child("chat").limitToLast(80);
+  chatListener=snap=>{
+    chatItems=[];
+    snap.forEach(c=>{
+      const v=c.val();
+      if(v)chatItems.push(v);
     });
-
     renderChatLogs(chatItems);
   };
-
-  chatRef.on("value", chatListener);
+  chatRef.on("value",chatListener,err=>{
+    console.error("chat read error:",err);
+  });
 }
 function renderChatLogs(items){
   ["chat-lobby","chat-play","chat-result"].forEach(id=>{
@@ -512,8 +501,13 @@ function renderChatLogs(items){
   });
 }
 function renderChatForCurrentScreen(){
+  // ルーム情報が更新されてもチャット欄を作り直さない
+  buildChat("chat-lobby");
+  buildChat("chat-play");
+  buildChat("chat-result");
   renderChatLogs(chatItems);
 }
+
 /* ---------- Result ---------- */
 async function reveal(m){
   clearInterval(timerInt);
