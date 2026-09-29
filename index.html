@@ -69,7 +69,7 @@ input[type=range]{width:100%;margin:12px 0}
 .ring span{font:600 34px "Klee One",cursive}
 
 /* チャット */
-.chat{margin-top:18px;border:2px solid #0004;border-radius:8px;background:#fffdf6;overflow:hidden}
+.chat{display:block;margin-top:18px;border:2px solid #0004;border-radius:8px;background:#fffdf6;overflow:hidden}
 .chat h2{font:600 20px "Klee One",cursive;margin:0;padding:8px 12px;border-bottom:1px dashed #0004}
 .chat-log{height:180px;overflow-y:auto;padding:8px 10px}
 .chat-empty{font-size:13px;opacity:.55;text-align:center;padding:30px 0}
@@ -105,6 +105,9 @@ input[type=range]{width:100%;margin:12px 0}
   <input id="code" type="text" maxlength="5" placeholder="A1B2C" autocapitalize="characters" autocomplete="off">
   <button id="btn-join" class="ghost">部屋に入る</button>
   <div class="msg" id="msg-home" role="alert"></div>
+  <p class="sub" style="font-size:12px;opacity:.65;margin-top:12px;margin-bottom:0">
+    ※ チャットは部屋を作成・参加した後に表示されます。
+  </p>
   <details style="font-size:13px;line-height:22px;margin-top:10px"><summary>ルール</summary>
    全員が同時に1〜100の整数を出します。合計が「50×人数」以上なら小さい数字の順、未満なら大きい数字の順。同じ数字は同順位（あいこ）です。
   </details>
@@ -118,7 +121,15 @@ input[type=range]{width:100%;margin:12px 0}
   <button id="btn-start" class="hide">ゲーム開始</button>
   <p class="sub hide" id="wait-host">ホストの開始を待っています…</p>
   <button id="btn-leave" class="ghost">退出</button>
-  <div id="chat-lobby"></div>
+  <div id="chat-lobby"><div class="chat">
+  <h2>💬 ひとことチャット</h2>
+  <div class="chat-log"><div class="chat-empty">まだメッセージはありません。</div></div>
+  <form class="chat-form">
+    <input type="text" maxlength="120" placeholder="メッセージを書く…" autocomplete="off">
+    <button type="submit">送信</button>
+  </form>
+  <div class="chat-note">この部屋の参加者だけが見られます。</div>
+</div></div>
 </section>
 
 <section id="s-play" class="hide">
@@ -129,7 +140,15 @@ input[type=range]{width:100%;margin:12px 0}
   <input id="rng" type="range" min="1" max="100" value="50" aria-label="スライダー">
   <button id="btn-lock">この数字で決定</button>
   <p class="sub" id="locked"></p>
-  <div id="chat-play"></div>
+  <div id="chat-play"><div class="chat">
+  <h2>💬 ひとことチャット</h2>
+  <div class="chat-log"><div class="chat-empty">まだメッセージはありません。</div></div>
+  <form class="chat-form">
+    <input type="text" maxlength="120" placeholder="メッセージを書く…" autocomplete="off">
+    <button type="submit">送信</button>
+  </form>
+  <div class="chat-note">この部屋の参加者だけが見られます。</div>
+</div></div>
 </section>
 
 <section id="s-result" class="hide">
@@ -140,7 +159,15 @@ input[type=range]{width:100%;margin:12px 0}
   <button id="btn-again" class="hide">もう一度あそぶ</button>
   <p class="sub hide" id="wait-again">ホストが次を準備中…</p>
   <button id="btn-out" class="ghost">退出</button>
-  <div id="chat-result"></div>
+  <div id="chat-result"><div class="chat">
+  <h2>💬 ひとことチャット</h2>
+  <div class="chat-log"><div class="chat-empty">まだメッセージはありません。</div></div>
+  <form class="chat-form">
+    <input type="text" maxlength="120" placeholder="メッセージを書く…" autocomplete="off">
+    <button type="submit">送信</button>
+  </form>
+  <div class="chat-note">この部屋の参加者だけが見られます。</div>
+</div></div>
 </section>
 </main>
 
@@ -173,7 +200,6 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
@@ -488,29 +514,33 @@ let chatItems=[];
 
 function buildChat(targetId){
   const target=$(targetId);
-  if(!target||target.dataset.ready==="1")return;
+  if(!target)return;
+
+  // チャット欄はHTMLに最初から存在する。
+  // ここでは送信フォームのイベントだけを接続する。
+  if(target.dataset.ready==="1")return;
   target.dataset.ready="1";
-  target.innerHTML=`
-    <div class="chat">
-      <h2>💬 ひとことチャット</h2>
-      <div class="chat-log"><div class="chat-empty">まだメッセージはありません。</div></div>
-      <form class="chat-form">
-        <input type="text" maxlength="120" placeholder="メッセージを書く…" autocomplete="off">
-        <button type="submit">送信</button>
-      </form>
-      <div class="chat-note">この部屋の参加者だけが見られます。</div>
-    </div>`;
-  const form=target.querySelector(".chat-form"),input=target.querySelector("input");
+
+  const form=target.querySelector(".chat-form");
+  const input=target.querySelector(".chat-form input");
+  if(!form||!input)return;
+
   form.onsubmit=async e=>{
     e.preventDefault();
     const text=input.value.trim();
     if(!text||!roomRef||!uid)return;
+
     input.value="";
     try{
       await roomRef.child("chat").push({
-        uid,name:myName,text:text.slice(0,120),ts:firebase.database.ServerValue.TIMESTAMP
+        uid,
+        name:myName,
+        text:text.slice(0,120),
+        ts:firebase.database.ServerValue.TIMESTAMP
       });
-    }catch(err){console.error(err)}
+    }catch(err){
+      console.error("chat send error:",err);
+    }
   };
 }
 
