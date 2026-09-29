@@ -64,6 +64,18 @@ input[type=range]{width:100%;margin:12px 0}
 @keyframes ring{to{stroke-dashoffset:0}}
 .ring span{font:600 34px "Klee One",cursive}
 @media (prefers-reduced-motion:reduce){.row .n.write,.ring.go .fg{animation-duration:.01s}.row .n .pen{display:none}}
+@media (pointer:coarse){
+  .chat{margin:12px 0 4px;padding:9px 9px 8px}
+  .chat h2{font-size:16px;margin-bottom:6px}
+  .chat-log{height:120px;padding:5px}
+  .chat-empty{font-size:12px;padding:14px 3px}
+  .chat-msg{margin:4px 0;font-size:13px;line-height:18px}
+  .chat-form{gap:5px;margin-top:6px}
+  .chat-form input{font-size:13px!important;padding:6px 7px!important}
+  .chat-form button{padding:6px 9px;font-size:13px}
+  .chat-note{font-size:10px;margin-top:4px}
+}
+
 
 /* ---------- Firebase chat ---------- */
 .chat{margin:18px 0 4px;padding:12px 12px 10px;background:#fffdf6;border:2px solid #33322f;border-radius:6px;box-shadow:2px 2px 0 #33322f}
