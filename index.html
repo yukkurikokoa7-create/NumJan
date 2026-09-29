@@ -467,17 +467,34 @@ function buildChat(id){
     }catch(err2){console.error(err2);input.value=text}
   };
 }
+let chatItems = [];
+
 function startChatListener(){
   if(!roomRef)return;
-  if(chatListener&&chatRef)chatRef.off("value",chatListener);
-  chatRef=roomRef.child("chat").limitToLast(80);
-  chatListener=snap=>{
-    const arr=[];
-    snap.forEach(c=>arr.push(c.val()));
-    renderChatLogs(arr);
+
+  if(chatListener && chatRef){
+    chatRef.off("value", chatListener);
+  }
+
+  // 先に画面を作る
+  buildChat("chat-lobby");
+  buildChat("chat-play");
+  buildChat("chat-result");
+
+  chatRef = roomRef.child("chat").limitToLast(80);
+
+  chatListener = snap => {
+    chatItems = [];
+
+    snap.forEach(c => {
+      const v = c.val();
+      if(v) chatItems.push(v);
+    });
+
+    renderChatLogs(chatItems);
   };
-  chatRef.on("value",chatListener);
-  buildChat("chat-lobby");buildChat("chat-play");buildChat("chat-result");
+
+  chatRef.on("value", chatListener);
 }
 function renderChatLogs(items){
   ["chat-lobby","chat-play","chat-result"].forEach(id=>{
@@ -495,9 +512,8 @@ function renderChatLogs(items){
   });
 }
 function renderChatForCurrentScreen(){
-  buildChat("chat-lobby");buildChat("chat-play");buildChat("chat-result");
+  renderChatLogs(chatItems);
 }
-
 /* ---------- Result ---------- */
 async function reveal(m){
   clearInterval(timerInt);
