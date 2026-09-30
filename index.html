@@ -52,6 +52,7 @@ input[type=range]{width:100%;margin:12px 0}
 .rank.show{animation:pop .4s ease-out forwards}
 .rank b{width:3.4em;color:var(--margin)}.rank.tie b::after{content:"(あいこ)";font-size:11px;color:var(--ink)}
 .rank.first b{color:var(--ok)}.rank.me{background:#f0be2544}
+.scoreline{display:block;font:500 12px/20px "Zen Kaku Gothic New",sans-serif;margin-top:-4px;opacity:.8}
 #banner{position:fixed;top:0;left:0;right:0;z-index:10;background:var(--ink);color:var(--paper);padding:8px 12px;display:flex;gap:12px;align-items:center;justify-content:center;font-size:14px}
 #banner button{margin:0;padding:3px 10px;font-size:13px;box-shadow:none}
 /* overlay */
@@ -106,7 +107,7 @@ input[type=range]{width:100%;margin:12px 0}
   <button id="btn-join" class="ghost">部屋に入る</button>
   <div class="msg" id="msg-home" role="alert"></div>
   <details style="font-size:13px;line-height:22px;margin-top:10px"><summary>ルール</summary>
-   全員が同時に1〜100の整数を出します。合計が「50×人数」以上なら小さい数字の順、未満なら大きい数字の順で1位から順位がつきます。同じ数字は同順位（あいこ）です。</details>
+   全員が同時に1〜100の整数を出します。合計が「50×人数」以上なら小さい数字の順、未満なら大きい数字の順で順位がつきます。その順位と数字から得点を計算し、これを10ラウンド行って累計得点で最終順位を決めます。</details>
 </section>
 
 <section id="s-lobby" class="hide">
@@ -181,6 +182,7 @@ const show=id=>["home","lobby","play","result"].forEach(s=>$("s-"+s).classList.t
 
 let uid=null,myName="",room="",isHost=false,roomRef=null;
 let roomData=null,players={},phase="home",round=0;
+const MAX_ROUNDS=10;
 let curVal=50,locked=false,timerInt=null,lastShownRound=0;
 let chatRef=null,chatListener=null,chatItems=[],wakeLock=null;
 
@@ -230,7 +232,7 @@ async function createRoom(){
       round:0,
       createdAt:firebase.database.ServerValue.TIMESTAMP,
       players:{[uid]:{
-        name:myName,online:true,joinedAt:firebase.database.ServerValue.TIMESTAMP
+        name:myName,online:true,score:0,joinedAt:firebase.database.ServerValue.TIMESTAMP
       }}
     });
     await setupPresence();
@@ -260,8 +262,10 @@ async function joinRoom(){
       banner("");err("満員です。");return
     }
     room=code;roomRef=ref;isHost=data.hostId===uid;phase=data.phase||"lobby";round=data.round||0;
+    const existingPlayer=list[uid]||{};
     await playerPath(room,uid).update({
-      name:myName,online:true,joinedAt:firebase.database.ServerValue.TIMESTAMP
+      name:myName,online:true,joinedAt:firebase.database.ServerValue.TIMESTAMP,
+      score:typeof existingPlayer.score==="number"?existingPlayer.score:0
     });
     await setupPresence();
     listenRoom();
@@ -339,7 +343,7 @@ function renderLobby(){
 async function startGame(){
   if(!isHost||!roomRef)return;
   const snap=await roomRef.once("value"),d=snap.val()||{};
-  if(d.phase!=="lobby")return;
+  if(d.phase!=="lobby"||((d.round||0)>=MAX_ROUNDS))return;
   if(Object.keys(d.players||{}).length<2)return;
   const nextRound=(d.round||0)+1;
   await roomRef.transaction(current=>{
@@ -429,17 +433,41 @@ async function finishRoundIfNeeded(){
   const sum=entries.reduce((a,e)=>a+e.n,0);
   const thr=50*entries.length;
   const asc=sum>=thr;
-  const result={entries:entries.map(({id,name,n})=>({id,name,n})),sum,thr,asc};
+
+  // このラウンドの順位を先に確定する。同じ数字は同順位。
+  entries.forEach(e=>e.rank=1+entries.filter(o=>asc?o.n<e.n:o.n>e.n).length);
+
+  // 得点 = [ 10 * |x-50|^0.35 / √y ]（ガウス記号＝床関数）
+  entries.forEach(e=>{
+    e.score=Math.floor(10*Math.pow(Math.abs(e.n-50),0.35)/Math.sqrt(e.rank));
+    e.total=(typeof ps[e.id].score==="number"?ps[e.id].score:0)+e.score;
+  });
+
+  const finalRound=d.round>=MAX_ROUNDS;
+  const finalSorted=[...entries].sort((a,b)=>b.total-a.total);
+  finalSorted.forEach((e,i)=>{
+    const previous=finalSorted[i-1];
+    e.finalRank=(previous&&previous.total===e.total)?previous.finalRank:i+1;
+  });
+
+  const result={
+    entries:entries.map(({id,name,n,rank,score,total,finalRank})=>({id,name,n,rank,score,total,finalRank})),
+    sum,thr,asc,round:d.round,final:finalRound
+  };
+
   await roomRef.transaction(current=>{
     if(!current||current.phase!=="play")return;
-    return {...current,phase:"result",result};
+    const updatedPlayers={...(current.players||{})};
+    for(const e of result.entries){
+      if(updatedPlayers[e.id]) updatedPlayers[e.id]={...updatedPlayers[e.id],score:e.total};
+    }
+    return {...current,players:updatedPlayers,phase:"result",result};
   });
 }
-
 async function again(){
-  if(!isHost||!roomRef)return;
+  if(!isHost||!roomRef||round>=MAX_ROUNDS)return;
   await roomRef.transaction(current=>{
-    if(!current||current.phase!=="result")return;
+    if(!current||current.phase!=="result"||current.round>=MAX_ROUNDS)return;
     return {...current,phase:"lobby",deadline:null,submissions:null,result:null};
   });
   locked=false;
@@ -533,7 +561,7 @@ async function reveal(m){
   $("btn-again").classList.add("hide");$("wait-again").classList.add("hide");
   m.entries.forEach(e=>{
     const d=document.createElement("div");d.className="row";
-    d.innerHTML="<span>"+esc(e.name)+"</span><span class='n'>"+e.n+"<span class='pen'>✏️</span></span>";
+    d.innerHTML="<span>"+esc(e.name)+"<span class='scoreline'>今回："+e.score+"点　累計："+e.total+"点</span></span><span class='n'>"+e.n+"<span class='pen'>✏️</span></span>";
     rows.appendChild(d);
   });
   await sleep(500);
@@ -541,24 +569,39 @@ async function reveal(m){
     d.querySelector(".n").classList.add("write");await sleep(1000);
   }
   const sym=m.sum>m.thr?"＞":m.sum<m.thr?"＜":"＝";
-  calc.innerHTML=m.sum+" "+sym+" "+m.thr+
-    "<small>合計 "+sym+" 50×"+m.entries.length+"人　→　"+(m.asc?"小さい数字が上位":"大きい数字が上位")+"</small>";
+  calc.innerHTML="第"+m.round+"ラウンド　"+m.sum+" "+sym+" "+m.thr+
+    "<small>合計 "+sym+" 50×"+m.entries.length+"人　→　"+(m.asc?"小さい数字が上位":"大きい数字が上位")+"<br>この回の得点と累計得点を表示しています</small>";
   calc.classList.add("show");await sleep(1800);
-  const sorted=[...m.entries].sort((a,b)=>m.asc?a.n-b.n:b.n-a.n);
-  sorted.forEach(e=>e.rank=1+sorted.filter(o=>m.asc?o.n<e.n:o.n>e.n).length);
-  sorted.forEach(e=>{
-    const tie=sorted.filter(o=>o.rank===e.rank).length>1;
-    const d=document.createElement("div");
-    d.className="rank"+(tie?" tie":"")+(e.rank===1?" first":"")+(e.id===uid?" me":"");
-    d.innerHTML="<b>"+e.rank+"位</b><span>"+esc(e.name)+"　"+e.n+"</span>";
-    ranks.appendChild(d);
-  });
-  for(const d of ranks.children){d.classList.add("show");await sleep(450)}
-  $("btn-again").classList.toggle("hide",!isHost);
-  $("wait-again").classList.toggle("hide",isHost);
+
+  if(m.final){
+    const finalSorted=[...m.entries].sort((a,b)=>b.total-a.total);
+    finalSorted.forEach(e=>{
+      const tie=finalSorted.filter(o=>o.finalRank===e.finalRank).length>1;
+      const d=document.createElement("div");
+      d.className="rank"+(tie?" tie":"")+(e.finalRank===1?" first":"")+(e.id===uid?" me":"");
+      d.innerHTML="<b>最終"+e.finalRank+"位</b><span>"+esc(e.name)+"　"+e.total+"点</span>";
+      ranks.appendChild(d);
+    });
+    for(const d of ranks.children){d.classList.add("show");await sleep(450)}
+    $("wait-again").textContent="10ラウンド終了！これが最終順位です。";
+    $("wait-again").classList.remove("hide");
+  }else{
+    const sorted=[...m.entries].sort((a,b)=>a.rank-b.rank);
+    sorted.forEach(e=>{
+      const tie=sorted.filter(o=>o.rank===e.rank).length>1;
+      const d=document.createElement("div");
+      d.className="rank"+(tie?" tie":"")+(e.rank===1?" first":"")+(e.id===uid?" me":"");
+      d.innerHTML="<b>"+e.rank+"位</b><span>"+esc(e.name)+"　"+e.n+"　"+e.score+"点</span>";
+      ranks.appendChild(d);
+    });
+    for(const d of ranks.children){d.classList.add("show");await sleep(450)}
+    $("btn-again").classList.toggle("hide",!isHost);
+    $("wait-again").classList.toggle("hide",isHost);
+    if(isHost)$("btn-again").textContent="次のラウンドへ（"+m.round+"/"+MAX_ROUNDS+"）";
+    else $("wait-again").textContent="ホストが次のラウンドを準備中…（"+m.round+"/"+MAX_ROUNDS+"）";
+  }
   buildChat("chat-result");
 }
-
 /* ---------- Leave / session ---------- */
 async function leave(msg=""){
   clearInterval(timerInt);releaseWake();
